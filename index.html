@@ -517,11 +517,13 @@
         // ============================================================
 
         function BallisticCalculator() {
-            const [ammoType, setAmmoType] = useState('7.62x39');
-            const [angle, setAngle] = useState(45);
-            const [azimuth, setAzimuth] = useState(90);
-            const [startLat, setStartLat] = useState(43.2220);
-            const [startLon, setStartLon] = useState(76.8512);
+            const [params, setParams] = useState({
+                ammoType: '7.62x39',
+                angle: 45,
+                azimuth: 90,
+                startLat: 43.2220,
+                startLon: 76.8512
+            });
             const [trajectory, setTrajectory] = useState(null);
             const [stats, setStats] = useState(null);
 
@@ -535,7 +537,7 @@
                 const map = new maplibregl.Map({
                     container: mapContainerRef.current,
                     style: 'https://tiles.openfreemap.org/styles/positron',
-                    center: [startLon, startLat],
+                    center: [params.startLon, params.startLat],
                     zoom: 10,
                     pitch: 60,
                     bearing: 0,
@@ -559,8 +561,8 @@
             }, []);
 
             useEffect(() => {
-                const ammo = AMMUNITION_DATABASE[ammoType];
-                const result = calculateTrajectory(startLat, startLon, angle, azimuth, ammo);
+                const ammo = AMMUNITION_DATABASE[params.ammoType];
+                const result = calculateTrajectory(params.startLat, params.startLon, params.angle, params.azimuth, ammo);
                 console.log(result);
 
                 setTrajectory(result.trajectory);
@@ -587,9 +589,9 @@
                     });
                     // mapRef.current.fitBounds(bounds, { padding: 100, duration: 1000 });
                 }
-            }, [ammoType, angle, azimuth, startLat, startLon]);
+            }, [params]);
 
-            const currentAmmo = AMMUNITION_DATABASE[ammoType];
+            const currentAmmo = AMMUNITION_DATABASE[params.ammoType];
 
             return h('div', { id: 'app' },
                 h('div', { id: 'map-container' },
@@ -600,23 +602,47 @@
                         h('div', { className: 'control-group' },
                             h('label', null, 'Тип боеприпаса'),
                             h('select', {
-                                value: ammoType,
-                                onChange: (e) => setAmmoType(e.target.value)
+                                value: params.ammoType,
+                                onChange: (e) => setParams(prev => ({...prev, ammoType: e.target.value}))
                             },
                                 Object.keys(AMMUNITION_DATABASE).map(key =>
                                     h('option', { value: key, key }, AMMUNITION_DATABASE[key].name)
                                 )
                             )
                         ),
+                        currentAmmo && h('div', { className: 'ammo-specs' },
+                            h('h4', null, 'Характеристики боеприпаса'),
+                            h('div', { className: 'spec-grid' },
+                                h('div', { className: 'spec-item' },
+                                    h('div', { className: 'spec-item-label' }, 'Масса'),
+                                    h('div', { className: 'spec-item-value' }, `${(currentAmmo.mass * 1000).toFixed(1)} г`)
+                                ),
+                                h('div', { className: 'spec-item' },
+                                    h('div', { className: 'spec-item-label' }, 'Калибр'),
+                                    h('div', { className: 'spec-item-value' }, `${(currentAmmo.diameter * 1000).toFixed(1)} мм`)
+                                ),
+                                h('div', { className: 'spec-item' },
+                                    h('div', { className: 'spec-item-label' }, 'Начальная скорость'),
+                                    h('div', { className: 'spec-item-value' }, `${currentAmmo.muzzleVelocity} м/с`)
+                                ),
+                                h('div', { className: 'spec-item' },
+                                    h('div', { className: 'spec-item-label' }, 'Коэф. сопротивления'),
+                                    h('div', { className: 'spec-item-value' }, currentAmmo.dragCoefficient.toFixed(3))
+                                )
+                            ),
+                            h('p', { style: { marginTop: '12px', fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' } },
+                                currentAmmo.description
+                            )
+                        ),
                         h('div', { className: 'control-group' },
-                            h('label', null, `Угол возвышения: ${angle}°`),
+                            h('label', null, `Угол возвышения: ${params.angle}°`),
                             h('input', {
                                 type: 'range',
                                 min: '0',
                                 max: '89',
                                 step: '1',
-                                value: angle,
-                                onInput: (e) => setAngle(Number(e.target.value))
+                                value: params.angle,
+                                onInput: (e) => setParams(prev => ({...prev, angle: Number(e.target.value)}))
                             }),
                             h('div', { className: 'value-display' },
                                 h('span', null, '0°'),
@@ -624,14 +650,14 @@
                             )
                         ),
                         h('div', { className: 'control-group' },
-                            h('label', null, `Азимут: ${azimuth}°`),
+                            h('label', null, `Азимут: ${params.azimuth}°`),
                             h('input', {
                                 type: 'range',
                                 min: '0',
                                 max: '360',
                                 step: '1',
-                                value: azimuth,
-                                onInput: (e) => setAzimuth(Number(e.target.value))
+                                value: params.azimuth,
+                                onInput: (e) => setParams(prev => ({...prev, azimuth: Number(e.target.value)}))
                             }),
                             h('div', { className: 'value-display' },
                                 h('span', null, 'С (0°)'),
@@ -646,8 +672,8 @@
                                     h('input', {
                                         type: 'number',
                                         step: '0.0001',
-                                        value: startLat,
-                                        onInput: (e) => setStartLat(Number(e.target.value))
+                                        value: params.startLat,
+                                        onInput: (e) => setParams(prev => ({...prev, startLat: Number(e.target.value)}))
                                     })
                                 ),
                                 h('div', { className: 'coord-input' },
@@ -655,8 +681,8 @@
                                     h('input', {
                                         type: 'number',
                                         step: '0.0001',
-                                        value: startLon,
-                                        onInput: (e) => setStartLon(Number(e.target.value))
+                                        value: params.startLon,
+                                        onInput: (e) => setParams(prev => ({...prev, startLon: Number(e.target.value)}))
                                     })
                                 )
                             )
@@ -681,30 +707,6 @@
                             h('span', { className: 'stat-value' }, `${stats.impactVelocity.toFixed(0)} м/с`)
                         )
                     ),
-                    currentAmmo && h('div', { className: 'ammo-specs' },
-                        h('h4', null, 'Характеристики боеприпаса'),
-                        h('div', { className: 'spec-grid' },
-                            h('div', { className: 'spec-item' },
-                                h('div', { className: 'spec-item-label' }, 'Масса'),
-                                h('div', { className: 'spec-item-value' }, `${(currentAmmo.mass * 1000).toFixed(1)} г`)
-                            ),
-                            h('div', { className: 'spec-item' },
-                                h('div', { className: 'spec-item-label' }, 'Калибр'),
-                                h('div', { className: 'spec-item-value' }, `${(currentAmmo.diameter * 1000).toFixed(1)} мм`)
-                            ),
-                            h('div', { className: 'spec-item' },
-                                h('div', { className: 'spec-item-label' }, 'Начальная скорость'),
-                                h('div', { className: 'spec-item-value' }, `${currentAmmo.muzzleVelocity} м/с`)
-                            ),
-                            h('div', { className: 'spec-item' },
-                                h('div', { className: 'spec-item-label' }, 'Коэф. сопротивления'),
-                                h('div', { className: 'spec-item-value' }, currentAmmo.dragCoefficient.toFixed(3))
-                            )
-                        ),
-                        h('p', { style: { marginTop: '12px', fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' } },
-                            currentAmmo.description
-                        )
-                    )
                 )
             );
         }
