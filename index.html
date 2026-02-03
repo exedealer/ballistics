@@ -485,7 +485,8 @@
                 getWidth: 3,
                 widthMinPixels: 2,
                 widthMaxPixels: 8,
-                billboard: false,
+                billboard: true,
+                rounded: true,
                 pickable: true
             });
         }
@@ -584,7 +585,7 @@
                     result.trajectory.forEach(point => {
                         bounds.extend([point[0], point[1]]);
                     });
-                    mapRef.current.fitBounds(bounds, { padding: 100, duration: 1000 });
+                    // mapRef.current.fitBounds(bounds, { padding: 100, duration: 1000 });
                 }
             }, [ammoType, angle, azimuth, startLat, startLon]);
 
@@ -593,16 +594,8 @@
             return h('div', { id: 'app' },
                 h('div', { id: 'map-container' },
                     h('div', { ref: mapContainerRef, id: 'map' }),
-                    h('div', { className: 'map-overlay' },
-                        h('h3', null, 'Инструкция'),
-                        h('p', null, 'Настройте параметры выстрела на панели справа. Зелёная точка - старт, красная - попадание. Траектория отображается в 3D.')
-                    )
                 ),
                 h('div', { className: 'sidebar' },
-                    h('div', { className: 'header' },
-                        h('h1', null, 'Баллистика'),
-                        h('div', { className: 'subtitle' }, 'Калькулятор траекторий')
-                    ),
                     h('div', { className: 'controls' },
                         h('div', { className: 'control-group' },
                             h('label', null, 'Тип боеприпаса'),
