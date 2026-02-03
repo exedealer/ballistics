@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Баллистический Калькулятор</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.16.0/dist/maplibre-gl.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #00ff41;
+            --secondary: #ff3a3a;
+            --bg-dark: #0a0e1a;
+            --bg-card: #141b2d;
+            --bg-input: #1a2332;
+            --text-primary: #e0e6ed;
+            --text-secondary: #8b95a8;
+            --border: #2a3447;
+            --grid: rgba(0, 255, 65, 0.1);
+        }
+
+        body {
+            font-family: 'IBM Plex Mono', monospace;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                repeating-linear-gradient(0deg, transparent, transparent 2px, var(--grid) 2px, var(--grid) 4px),
+                repeating-linear-gradient(90deg, transparent, transparent 2px, var(--grid) 2px, var(--grid) 4px);
+            pointer-events: none;
+            opacity: 0.3;
+            z-index: 1;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            position: relative;
+            z-index: 2;
+        }
+
+        #map-container {
+            flex: 1;
+            position: relative;
+            background: #0d1117;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .sidebar {
+            width: 380px;
+            background: var(--bg-card);
+            border-left: 2px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .header {
+            padding: 24px;
+            border-bottom: 2px solid var(--border);
+            background: linear-gradient(135deg, var(--bg-card) 0%, #1a2640 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(0, 255, 65, 0.05) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            font-weight: 900;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+            position: relative;
+        }
+
+        .header .subtitle {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            letter-spacing: 1px;
+            position: relative;
+        }
+
+        .controls {
+            padding: 20px;
+            flex: 1;
+        }
+
+        .control-group {
+            margin-bottom: 24px;
+            background: var(--bg-input);
+            padding: 16px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .control-group:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 255, 65, 0.1);
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            color: var(--text-secondary);
+        }
+
+        .control-group select,
+        .control-group input {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 2px;
+            color: var(--text-primary);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .control-group select:focus,
+        .control-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+        }
+
+        .control-group input[type="range"] {
+            padding: 0;
+            height: 6px;
+            background: var(--border);
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--primary);
+            cursor: pointer;
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .control-group input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: var(--primary);
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+            box-shadow: 0 0 10px var(--primary);
+        }
+
+        .value-display {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--primary);
+        }
+
+        .coordinates {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .coord-input {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .coord-input label {
+            font-size: 10px;
+            margin-bottom: 6px;
+        }
+
+        .stats {
+            padding: 20px;
+            background: var(--bg-input);
+            border-top: 2px solid var(--border);
+            border-bottom: 2px solid var(--border);
+        }
+
+        .stats h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: var(--primary);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+        }
+
+        .stat-value {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .ammo-specs {
+            padding: 20px;
+            background: rgba(0, 255, 65, 0.03);
+            border-top: 1px solid var(--primary);
+        }
+
+        .ammo-specs h4 {
+            font-size: 12px;
+            color: var(--primary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .spec-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 11px;
+        }
+
+        .spec-item {
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+            background: var(--bg-input);
+            border-radius: 2px;
+        }
+
+        .spec-item-label {
+            color: var(--text-secondary);
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .spec-item-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 14, 26, 0.95);
+            padding: 16px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            max-width: 300px;
+        }
+
+        .map-overlay h3 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 12px;
+            color: var(--primary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .map-overlay p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 14px;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 100%;
+                max-height: 50vh;
+            }
+
+            #app {
+                flex-direction: column-reverse;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.16.0/dist/maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.2.6/dist.min.js"></script>
+    <script type="module">
+        import { h, render, Component } from 'https://cdn.jsdelivr.net/npm/preact@10.28.2/+esm';
+        import { useState, useEffect, useRef } from 'https://cdn.jsdelivr.net/npm/preact@10.28.2/hooks/+esm';
+
+        // ============================================================
+        // БАЛЛИСТИЧЕСКИЕ ДАННЫЕ - ЛЕГКО РАСШИРЯЕМЫЕ
+        // ============================================================
+        const AMMUNITION_DATABASE = {
+            '7.62x39': {
+                name: '7.62×39мм',
+                description: 'Промежуточный патрон АК-47',
+                mass: 0.00794, // кг
+                diameter: 0.00762, // м
+                muzzleVelocity: 715, // м/с
+                dragCoefficient: 0.295,
+                category: 'rifle'
+            },
+            '50bmg': {
+                name: '.50 BMG',
+                description: 'Крупнокалиберный пулемётный патрон',
+                mass: 0.0420, // кг
+                diameter: 0.0127, // м
+                muzzleVelocity: 928, // м/с
+                dragCoefficient: 0.295,
+                category: 'heavy'
+            },
+            '152mm': {
+                name: '152мм 3ВОФ36',
+                description: 'Артиллерийский снаряд 2С19 Мста-С',
+                mass: 43.56, // кг
+                diameter: 0.152, // м
+                muzzleVelocity: 810, // м/с
+                dragCoefficient: 0.325,
+                category: 'artillery'
+            }
+        };
+
+        // ============================================================
+        // БАЛЛИСТИЧЕСКИЕ РАСЧЁТЫ
+        // ============================================================
+
+        const GRAVITY = 9.81; // м/с²
+        const AIR_DENSITY = 1.225; // кг/м³
+
+        function calculateDragForce(velocity, ammo) {
+            const area = Math.PI * Math.pow(ammo.diameter / 2, 2);
+            const dragForce = 0.5 * AIR_DENSITY * velocity * velocity * ammo.dragCoefficient * area;
+            return dragForce;
+        }
+
+        function calculateTrajectory(startLat, startLon, angle, azimuth, ammo, windSpeed = 0, windDirection = 0) {
+            const dt = 0.1; // временной шаг в секундах
+            const maxTime = 120; // максимальное время симуляции
+
+            const angleRad = (angle * Math.PI) / 180;
+            const azimuthRad = (azimuth * Math.PI) / 180;
+
+            let vx = ammo.muzzleVelocity * Math.cos(angleRad) * Math.sin(azimuthRad);
+            let vy = ammo.muzzleVelocity * Math.cos(angleRad) * Math.cos(azimuthRad);
+            let vz = ammo.muzzleVelocity * Math.sin(angleRad);
+
+            let x = 0;
+            let y = 0;
+            let z = 0;
+
+            const trajectory = [[startLon, startLat, 0]];
+            let time = 0;
+            let maxHeight = 0;
+            let range = 0;
+
+            while (z >= 0 && time < maxTime) {
+                const velocity = Math.sqrt(vx * vx + vy * vy + vz * vz);
+                const dragForce = calculateDragForce(velocity, ammo);
+                const dragAccel = dragForce / ammo.mass;
+
+                if (velocity > 0) {
+                    const ax = -(dragAccel * vx) / velocity;
+                    const ay = -(dragAccel * vy) / velocity;
+                    const az = -GRAVITY - (dragAccel * vz) / velocity;
+
+                    vx += ax * dt;
+                    vy += ay * dt;
+                    vz += az * dt;
+                }
+
+                x += vx * dt;
+                y += vy * dt;
+                z += vz * dt;
+
+                if (z > maxHeight) maxHeight = z;
+                range = Math.sqrt(x * x + y * y);
+
+                const deltaLat = (y / 111320);
+                const deltaLon = (x / (111320 * Math.cos(startLat * Math.PI / 180)));
+
+                trajectory.push([
+                    startLon + deltaLon,
+                    startLat + deltaLat,
+                    Math.max(0, z)
+                ]);
+
+                time += dt;
+            }
+
+            return {
+                trajectory,
+                maxHeight,
+                range,
+                flightTime: time,
+                impactVelocity: Math.sqrt(vx * vx + vy * vy + vz * vz)
+            };
+        }
+
+        // ============================================================
+        // DECK.GL LAYER
+        // ============================================================
+
+        function createTrajectoryLayer(trajectoryData, color = [0, 255, 65, 255]) {
+            if (!trajectoryData || trajectoryData.length < 2) return null;
+
+            return new deck.PathLayer({
+                id: 'trajectory-path',
+                data: [{ path: trajectoryData }],
+                getPath: d => d.path,
+                getColor: color,
+                getWidth: 3,
+                widthMinPixels: 2,
+                widthMaxPixels: 8,
+                billboard: false,
+                pickable: true
+            });
+        }
+
+        function createPointsLayer(trajectoryData) {
+            if (!trajectoryData || trajectoryData.length < 2) return null;
+
+            const startPoint = trajectoryData[0];
+            const endPoint = trajectoryData[trajectoryData.length - 1];
+
+            return new deck.ScatterplotLayer({
+                id: 'trajectory-points',
+                data: [
+                    { position: startPoint, color: [0, 255, 65, 255], size: 12 },
+                    { position: endPoint, color: [255, 58, 58, 255], size: 12 }
+                ],
+                getPosition: d => d.position,
+                getFillColor: d => d.color,
+                getRadius: d => d.size,
+                radiusMinPixels: 6,
+                radiusMaxPixels: 20,
+                pickable: true
+            });
+        }
+
+        // ============================================================
+        // PREACT КОМПОНЕНТ
+        // ============================================================
+
+        function BallisticCalculator() {
+            const [ammoType, setAmmoType] = useState('7.62x39');
+            const [angle, setAngle] = useState(45);
+            const [azimuth, setAzimuth] = useState(90);
+            const [startLat, setStartLat] = useState(43.2220);
+            const [startLon, setStartLon] = useState(76.8512);
+            const [trajectory, setTrajectory] = useState(null);
+            const [stats, setStats] = useState(null);
+
+            const mapContainerRef = useRef(null);
+            const mapRef = useRef(null);
+            const deckOverlayRef = useRef(null);
+
+            useEffect(() => {
+                if (!mapContainerRef.current) return;
+
+                const map = new maplibregl.Map({
+                    container: mapContainerRef.current,
+                    style: 'https://tiles.openfreemap.org/styles/positron',
+                    center: [startLon, startLat],
+                    zoom: 10,
+                    pitch: 60,
+                    bearing: 0,
+                });
+
+                map.on('load', () => {
+                    const deckOverlay = new deck.MapboxOverlay({
+                        interleaved: false,
+                        layers: []
+                    });
+
+                    map.addControl(deckOverlay);
+                    deckOverlayRef.current = deckOverlay;
+                });
+
+                mapRef.current = map;
+
+                return () => {
+                    if (map) map.remove();
+                };
+            }, []);
+
+            useEffect(() => {
+                const ammo = AMMUNITION_DATABASE[ammoType];
+                const result = calculateTrajectory(startLat, startLon, angle, azimuth, ammo);
+                console.log(result);
+
+                setTrajectory(result.trajectory);
+                setStats({
+                    maxHeight: result.maxHeight,
+                    range: result.range,
+                    flightTime: result.flightTime,
+                    impactVelocity: result.impactVelocity
+                });
+
+                if (deckOverlayRef.current && result.trajectory) {
+                    deckOverlayRef.current.setProps({
+                        layers: [
+                            createTrajectoryLayer(result.trajectory),
+                            createPointsLayer(result.trajectory)
+                        ]
+                    });
+                }
+
+                if (mapRef.current && result.trajectory.length > 1) {
+                    const bounds = new maplibregl.LngLatBounds();
+                    result.trajectory.forEach(point => {
+                        bounds.extend([point[0], point[1]]);
+                    });
+                    mapRef.current.fitBounds(bounds, { padding: 100, duration: 1000 });
+                }
+            }, [ammoType, angle, azimuth, startLat, startLon]);
+
+            const currentAmmo = AMMUNITION_DATABASE[ammoType];
+
+            return h('div', { id: 'app' },
+                h('div', { id: 'map-container' },
+                    h('div', { ref: mapContainerRef, id: 'map' }),
+                    h('div', { className: 'map-overlay' },
+                        h('h3', null, 'Инструкция'),
+                        h('p', null, 'Настройте параметры выстрела на панели справа. Зелёная точка - старт, красная - попадание. Траектория отображается в 3D.')
+                    )
+                ),
+                h('div', { className: 'sidebar' },
+                    h('div', { className: 'header' },
+                        h('h1', null, 'Баллистика'),
+                        h('div', { className: 'subtitle' }, 'Калькулятор траекторий')
+                    ),
+                    h('div', { className: 'controls' },
+                        h('div', { className: 'control-group' },
+                            h('label', null, 'Тип боеприпаса'),
+                            h('select', {
+                                value: ammoType,
+                                onChange: (e) => setAmmoType(e.target.value)
+                            },
+                                Object.keys(AMMUNITION_DATABASE).map(key =>
+                                    h('option', { value: key, key }, AMMUNITION_DATABASE[key].name)
+                                )
+                            )
+                        ),
+                        h('div', { className: 'control-group' },
+                            h('label', null, `Угол возвышения: ${angle}°`),
+                            h('input', {
+                                type: 'range',
+                                min: '0',
+                                max: '89',
+                                step: '1',
+                                value: angle,
+                                onInput: (e) => setAngle(Number(e.target.value))
+                            }),
+                            h('div', { className: 'value-display' },
+                                h('span', null, '0°'),
+                                h('span', null, '89°')
+                            )
+                        ),
+                        h('div', { className: 'control-group' },
+                            h('label', null, `Азимут: ${azimuth}°`),
+                            h('input', {
+                                type: 'range',
+                                min: '0',
+                                max: '360',
+                                step: '1',
+                                value: azimuth,
+                                onInput: (e) => setAzimuth(Number(e.target.value))
+                            }),
+                            h('div', { className: 'value-display' },
+                                h('span', null, 'С (0°)'),
+                                h('span', null, 'Ю (180°)')
+                            )
+                        ),
+                        h('div', { className: 'control-group' },
+                            h('label', null, 'Координаты старта'),
+                            h('div', { className: 'coordinates' },
+                                h('div', { className: 'coord-input' },
+                                    h('label', null, 'Широта'),
+                                    h('input', {
+                                        type: 'number',
+                                        step: '0.0001',
+                                        value: startLat,
+                                        onInput: (e) => setStartLat(Number(e.target.value))
+                                    })
+                                ),
+                                h('div', { className: 'coord-input' },
+                                    h('label', null, 'Долгота'),
+                                    h('input', {
+                                        type: 'number',
+                                        step: '0.0001',
+                                        value: startLon,
+                                        onInput: (e) => setStartLon(Number(e.target.value))
+                                    })
+                                )
+                            )
+                        )
+                    ),
+                    stats && h('div', { className: 'stats' },
+                        h('h3', null, 'Результаты'),
+                        h('div', { className: 'stat-row' },
+                            h('span', { className: 'stat-label' }, 'Дальность'),
+                            h('span', { className: 'stat-value' }, `${(stats.range / 1000).toFixed(2)} км`)
+                        ),
+                        h('div', { className: 'stat-row' },
+                            h('span', { className: 'stat-label' }, 'Макс. высота'),
+                            h('span', { className: 'stat-value' }, `${stats.maxHeight.toFixed(0)} м`)
+                        ),
+                        h('div', { className: 'stat-row' },
+                            h('span', { className: 'stat-label' }, 'Время полёта'),
+                            h('span', { className: 'stat-value' }, `${stats.flightTime.toFixed(1)} с`)
+                        ),
+                        h('div', { className: 'stat-row' },
+                            h('span', { className: 'stat-label' }, 'Скорость удара'),
+                            h('span', { className: 'stat-value' }, `${stats.impactVelocity.toFixed(0)} м/с`)
+                        )
+                    ),
+                    currentAmmo && h('div', { className: 'ammo-specs' },
+                        h('h4', null, 'Характеристики боеприпаса'),
+                        h('div', { className: 'spec-grid' },
+                            h('div', { className: 'spec-item' },
+                                h('div', { className: 'spec-item-label' }, 'Масса'),
+                                h('div', { className: 'spec-item-value' }, `${(currentAmmo.mass * 1000).toFixed(1)} г`)
+                            ),
+                            h('div', { className: 'spec-item' },
+                                h('div', { className: 'spec-item-label' }, 'Калибр'),
+                                h('div', { className: 'spec-item-value' }, `${(currentAmmo.diameter * 1000).toFixed(1)} мм`)
+                            ),
+                            h('div', { className: 'spec-item' },
+                                h('div', { className: 'spec-item-label' }, 'Начальная скорость'),
+                                h('div', { className: 'spec-item-value' }, `${currentAmmo.muzzleVelocity} м/с`)
+                            ),
+                            h('div', { className: 'spec-item' },
+                                h('div', { className: 'spec-item-label' }, 'Коэф. сопротивления'),
+                                h('div', { className: 'spec-item-value' }, currentAmmo.dragCoefficient.toFixed(3))
+                            )
+                        ),
+                        h('p', { style: { marginTop: '12px', fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' } },
+                            currentAmmo.description
+                        )
+                    )
+                )
+            );
+        }
+
+        render(h(BallisticCalculator), document.getElementById('root'));
+    </script>
+</body>
+</html>
