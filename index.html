@@ -407,10 +407,10 @@
             return dragForce;
         }
 
-        function calculateTrajectory(params, ammo, windSpeed = 0, windDirection = 0) {
+        function calculateTrajectory(params, ammo, queryElevation = null, windSpeed = 0, windDirection = 0) {
             const { startLat, startLon, angle, azimuth, startAlt = 0 } = params;
             const dt = 0.1; // временной шаг в секундах
-            const maxTime = 120; // максимальное время симуляции
+            const maxPoints = 1200; // максимальное количество точек траектории
 
             const angleRad = (angle * Math.PI) / 180;
             const azimuthRad = (azimuth * Math.PI) / 180;
@@ -424,11 +424,11 @@
             let z = startAlt;
 
             const trajectory = [[startLon, startLat, startAlt]];
-            let time = 0;
             let maxHeight = 0;
             let range = 0;
 
-            while (z > 0 && time < maxTime) {
+            // Phase 1: Simulate physics without terrain checks
+            while (z >= 0 && trajectory.length < maxPoints) {
                 const velocity = Math.sqrt(vx * vx + vy * vy + vz * vz);
                 const dragForce = calculateDragForce(velocity, ammo);
                 const dragAccel = dragForce / ammo.mass;
@@ -451,24 +451,53 @@
 
                 const deltaLat = (y / 111320);
                 const deltaLon = (x / (111320 * Math.cos(startLat * Math.PI / 180)));
+                const lon = startLon + deltaLon;
+                const lat = startLat + deltaLat;
 
-                trajectory.push([
-                    startLon + deltaLon,
-                    startLat + deltaLat,
-                    Math.max(0, z)
-                ]);
-
-                time += dt;
+                trajectory.push([lon, lat, Math.max(0, z)]);
             }
 
-            // Calculate final range after loop
-            range = Math.sqrt(x * x + y * y);
+            // Phase 2: Trim trajectory from end where it intersects terrain
+            if (queryElevation && trajectory.length > 1) {
+                const step = 10;
+                let trimIndex = 0; // Default to keeping only start point
+
+                // Coarse search: check every 10th point from end
+                for (let i = trajectory.length - 1; i >= 0; i -= step) {
+                    const point = trajectory[i];
+                    const terrainElevation = queryElevation([point[0], point[1]]) || 0;
+
+                    if (point[2] > terrainElevation) {
+                        // Found point above terrain, fine search in [i, min(i+step, length-1)]
+                        const searchEnd = Math.min(i + step, trajectory.length - 1);
+
+                        for (let j = searchEnd; j >= i; j--) {
+                            const finePoint = trajectory[j];
+                            const fineTerrainElevation = queryElevation([finePoint[0], finePoint[1]]) || 0;
+
+                            if (finePoint[2] > fineTerrainElevation) {
+                                trimIndex = j;
+                                break;
+                            }
+                        }
+                        break; // Exit coarse search
+                    }
+                }
+
+                trajectory.length = trimIndex + 1;
+            }
+
+            // Calculate final range after trimming
+            const lastPoint = trajectory[trajectory.length - 1];
+            const finalDeltaLat = (lastPoint[1] - startLat) * 111320;
+            const finalDeltaLon = (lastPoint[0] - startLon) * 111320 * Math.cos(startLat * Math.PI / 180);
+            range = Math.sqrt(finalDeltaLat * finalDeltaLat + finalDeltaLon * finalDeltaLon);
 
             return {
                 trajectory,
                 maxHeight,
                 range,
-                flightTime: time,
+                flightTime: (trajectory.length - 1) * dt,
                 impactVelocity: Math.sqrt(vx * vx + vy * vy + vz * vz)
             };
         }
@@ -524,18 +553,23 @@
                 ammoType: '7.62x39',
                 angle: 45,
                 azimuth: 90,
-                startLat: 43.2220,
-                startLon: 76.8512,
+                startLat: 43.1941129696722,
+                startLon: 76.8873077630997,
                 startAlt: 0
             });
-            // Computed state from params
-            const computed = useMemo(() => {
-                const ammo = AMMUNITION_DATABASE[params.ammoType];
-                return calculateTrajectory(params, ammo);
-            }, [params]);
 
             const mapRef = useRef(null);
             const deckOverlayRef = useRef(null);
+
+            // Computed state from params
+            const computed = useMemo(() => {
+                const ammo = AMMUNITION_DATABASE[params.ammoType];
+                // Create terrain query function if map available
+                const queryElevation = mapRef.current && mapRef.current.getTerrain()
+                    ? (lngLat) => mapRef.current.queryTerrainElevation(lngLat)
+                    : null;
+                return calculateTrajectory(params, ammo, queryElevation);
+            }, [params]);
 
             const mapContainerRef = useCallback((node) => {
                 if (!node) {
@@ -560,12 +594,7 @@
                 });
 
                 // Update start point on map click
-                map.on('click', async (e) => {
-                    // Wait for terrain to load if not ready
-                    if (map.getTerrain() && !map.areTilesLoaded()) {
-                        await map.once('idle');
-                    }
-
+                map.on('click', (e) => {
                     const elevation = map.queryTerrainElevation(e.lngLat) || 0;
                     setParams(prev => ({
                         ...prev,
@@ -603,16 +632,13 @@
 
             // Update deck layers when computed state changes
             useEffect(() => {
-                console.log(computed);
-
-                if (deckOverlayRef.current && computed.trajectory) {
-                    deckOverlayRef.current.setProps({
-                        layers: [
-                            createTrajectoryLayer(computed.trajectory),
-                            createPointsLayer(computed.trajectory)
-                        ]
-                    });
-                }
+                if (!(deckOverlayRef.current && computed.trajectory)) return;
+                deckOverlayRef.current.setProps({
+                    layers: [
+                        createTrajectoryLayer(computed.trajectory),
+                        createPointsLayer(computed.trajectory)
+                    ]
+                });
             }, [computed]);
 
             const currentAmmo = AMMUNITION_DATABASE[params.ammoType];
