@@ -359,7 +359,7 @@
     <script src="https://cdn.jsdelivr.net/npm/deck.gl@9.2.6/dist.min.js"></script>
     <script type="module">
         import { h, render, Component } from 'https://cdn.jsdelivr.net/npm/preact@10.28.2/+esm';
-        import { useState, useEffect, useRef } from 'https://cdn.jsdelivr.net/npm/preact@10.28.2/hooks/+esm';
+        import { useState, useEffect, useRef, useCallback, useMemo } from 'https://cdn.jsdelivr.net/npm/preact@10.28.2/hooks/+esm';
 
         // ============================================================
         // БАЛЛИСТИЧЕСКИЕ ДАННЫЕ - ЛЕГКО РАСШИРЯЕМЫЕ
@@ -407,7 +407,8 @@
             return dragForce;
         }
 
-        function calculateTrajectory(startLat, startLon, angle, azimuth, ammo, windSpeed = 0, windDirection = 0) {
+        function calculateTrajectory(params, ammo, windSpeed = 0, windDirection = 0) {
+            const { startLat, startLon, angle, azimuth, startAlt = 0 } = params;
             const dt = 0.1; // временной шаг в секундах
             const maxTime = 120; // максимальное время симуляции
 
@@ -420,14 +421,14 @@
 
             let x = 0;
             let y = 0;
-            let z = 0;
+            let z = startAlt;
 
-            const trajectory = [[startLon, startLat, 0]];
+            const trajectory = [[startLon, startLat, startAlt]];
             let time = 0;
             let maxHeight = 0;
             let range = 0;
 
-            while (z >= 0 && time < maxTime) {
+            while (z > 0 && time < maxTime) {
                 const velocity = Math.sqrt(vx * vx + vy * vy + vz * vz);
                 const dragForce = calculateDragForce(velocity, ammo);
                 const dragAccel = dragForce / ammo.mass;
@@ -446,8 +447,7 @@
                 y += vy * dt;
                 z += vz * dt;
 
-                if (z > maxHeight) maxHeight = z;
-                range = Math.sqrt(x * x + y * y);
+                maxHeight = Math.max(maxHeight, z);
 
                 const deltaLat = (y / 111320);
                 const deltaLon = (x / (111320 * Math.cos(startLat * Math.PI / 180)));
@@ -460,6 +460,9 @@
 
                 time += dt;
             }
+
+            // Calculate final range after loop
+            range = Math.sqrt(x * x + y * y);
 
             return {
                 trajectory,
@@ -522,28 +525,70 @@
                 angle: 45,
                 azimuth: 90,
                 startLat: 43.2220,
-                startLon: 76.8512
+                startLon: 76.8512,
+                startAlt: 0
             });
-            const [trajectory, setTrajectory] = useState(null);
-            const [stats, setStats] = useState(null);
+            // Computed state from params
+            const computed = useMemo(() => {
+                const ammo = AMMUNITION_DATABASE[params.ammoType];
+                return calculateTrajectory(params, ammo);
+            }, [params]);
 
-            const mapContainerRef = useRef(null);
             const mapRef = useRef(null);
             const deckOverlayRef = useRef(null);
 
-            useEffect(() => {
-                if (!mapContainerRef.current) return;
+            const mapContainerRef = useCallback((node) => {
+                if (!node) {
+                    // Cleanup when element is removed
+                    if (mapRef.current) {
+                        mapRef.current.remove();
+                        mapRef.current = null;
+                        deckOverlayRef.current = null;
+                    }
+                    return;
+                }
 
+                // Initialize map when element is created in DOM
                 const map = new maplibregl.Map({
-                    container: mapContainerRef.current,
-                    style: 'https://tiles.openfreemap.org/styles/positron',
+                    container: node,
+                    // style: 'https://tiles.openfreemap.org/styles/positron',
+                    style: 'https://api.maptiler.com/maps/topo-v4/style.json?key=Uz7bgVMimrtzx1UnaF6W',
                     center: [params.startLon, params.startLat],
                     zoom: 10,
                     pitch: 60,
                     bearing: 0,
                 });
 
+                // Update start point on map click
+                map.on('click', async (e) => {
+                    // Wait for terrain to load if not ready
+                    if (map.getTerrain() && !map.areTilesLoaded()) {
+                        await map.once('idle');
+                    }
+
+                    const elevation = map.queryTerrainElevation(e.lngLat) || 0;
+                    setParams(prev => ({
+                        ...prev,
+                        startLat: e.lngLat.lat,
+                        startLon: e.lngLat.lng,
+                        startAlt: elevation
+                    }));
+                });
+
                 map.on('load', () => {
+                    // Add terrain source
+                    map.addSource('terrain', {
+                        type: 'raster-dem',
+                        url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=Uz7bgVMimrtzx1UnaF6W',
+                        tileSize: 256
+                    });
+
+                    // Enable 3D terrain
+                    map.setTerrain({
+                        source: 'terrain',
+                        exaggeration: 1,
+                    });
+
                     const deckOverlay = new deck.MapboxOverlay({
                         interleaved: false,
                         layers: []
@@ -554,42 +599,21 @@
                 });
 
                 mapRef.current = map;
-
-                return () => {
-                    if (map) map.remove();
-                };
             }, []);
 
+            // Update deck layers when computed state changes
             useEffect(() => {
-                const ammo = AMMUNITION_DATABASE[params.ammoType];
-                const result = calculateTrajectory(params.startLat, params.startLon, params.angle, params.azimuth, ammo);
-                console.log(result);
+                console.log(computed);
 
-                setTrajectory(result.trajectory);
-                setStats({
-                    maxHeight: result.maxHeight,
-                    range: result.range,
-                    flightTime: result.flightTime,
-                    impactVelocity: result.impactVelocity
-                });
-
-                if (deckOverlayRef.current && result.trajectory) {
+                if (deckOverlayRef.current && computed.trajectory) {
                     deckOverlayRef.current.setProps({
                         layers: [
-                            createTrajectoryLayer(result.trajectory),
-                            createPointsLayer(result.trajectory)
+                            createTrajectoryLayer(computed.trajectory),
+                            createPointsLayer(computed.trajectory)
                         ]
                     });
                 }
-
-                if (mapRef.current && result.trajectory.length > 1) {
-                    const bounds = new maplibregl.LngLatBounds();
-                    result.trajectory.forEach(point => {
-                        bounds.extend([point[0], point[1]]);
-                    });
-                    // mapRef.current.fitBounds(bounds, { padding: 100, duration: 1000 });
-                }
-            }, [params]);
+            }, [computed]);
 
             const currentAmmo = AMMUNITION_DATABASE[params.ammoType];
 
@@ -688,23 +712,23 @@
                             )
                         )
                     ),
-                    stats && h('div', { className: 'stats' },
+                    computed.trajectory && h('div', { className: 'stats' },
                         h('h3', null, 'Результаты'),
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Дальность'),
-                            h('span', { className: 'stat-value' }, `${(stats.range / 1000).toFixed(2)} км`)
+                            h('span', { className: 'stat-value' }, `${(computed.range / 1000).toFixed(2)} км`)
                         ),
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Макс. высота'),
-                            h('span', { className: 'stat-value' }, `${stats.maxHeight.toFixed(0)} м`)
+                            h('span', { className: 'stat-value' }, `${computed.maxHeight.toFixed(0)} м`)
                         ),
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Время полёта'),
-                            h('span', { className: 'stat-value' }, `${stats.flightTime.toFixed(1)} с`)
+                            h('span', { className: 'stat-value' }, `${computed.flightTime.toFixed(1)} с`)
                         ),
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Скорость удара'),
-                            h('span', { className: 'stat-value' }, `${stats.impactVelocity.toFixed(0)} м/с`)
+                            h('span', { className: 'stat-value' }, `${computed.impactVelocity.toFixed(0)} м/с`)
                         )
                     ),
                 )
