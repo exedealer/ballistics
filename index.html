@@ -364,7 +364,7 @@
         // ============================================================
         // БАЛЛИСТИЧЕСКИЕ ДАННЫЕ - ЛЕГКО РАСШИРЯЕМЫЕ
         // ============================================================
-        const AMMUNITION_DATABASE = {
+        const AMMO_DB = {
             '7.62x39': {
                 name: '7.62×39мм',
                 description: 'Промежуточный патрон АК-47',
@@ -372,7 +372,7 @@
                 diameter: 0.00762, // м
                 muzzleVelocity: 715, // м/с
                 dragCoefficient: 0.295,
-                category: 'rifle'
+                category: 'rifle',
             },
             '50bmg': {
                 name: '.50 BMG',
@@ -381,7 +381,7 @@
                 diameter: 0.0127, // м
                 muzzleVelocity: 928, // м/с
                 dragCoefficient: 0.295,
-                category: 'heavy'
+                category: 'heavy',
             },
             '152mm': {
                 name: '152мм 3ВОФ36',
@@ -390,7 +390,7 @@
                 diameter: 0.152, // м
                 muzzleVelocity: 810, // м/с
                 dragCoefficient: 0.325,
-                category: 'artillery'
+                category: 'artillery',
             }
         };
 
@@ -401,9 +401,9 @@
         const GRAVITY = 9.81; // м/с²
         const AIR_DENSITY = 1.225; // кг/м³
 
-
-
-        function calculateTrajectory(params, ammo, queryElevation = null, windSpeed = 0, windDirection = 0) {
+        // Calculate full ballistic trajectory without terrain clipping
+        // Terrain intersection is handled at render time using loaded map tiles
+        function calculateTrajectory(params, ammo, getAlt, windSpeed = 0, windDirection = 0) {
             const { startLat, startLon, angle, azimuth, startAlt = 0 } = params;
             const dt = 0.1; // временной шаг в секундах
             const maxPoints = 1200; // максимальное количество точек траектории
@@ -419,9 +419,9 @@
             let y = 0;
             let z = startAlt;
 
-            const trajectory = [[startLon, startLat, startAlt]];
+            const trajectory = [[startLon, startLat, startAlt, ammo.muzzleVelocity]];
             let maxHeight = 0;
-            let range = 0;
+            let peakIndex = 0;
 
             // Pre-calculate static drag coefficient
             const area = Math.PI * Math.pow(.5 * ammo.diameter, 2);
@@ -444,58 +444,82 @@
                 y += vy * dt;
                 z += vz * dt;
 
-                maxHeight = Math.max(maxHeight, z);
+                if (z > maxHeight) {
+                    maxHeight = z;
+                    peakIndex = trajectory.length; // Will be set after push
+                }
 
                 const deltaLat = (y / 111320);
                 const deltaLon = (x / (111320 * Math.cos(startLat * Math.PI / 180)));
                 const lon = startLon + deltaLon;
                 const lat = startLat + deltaLat;
 
-                trajectory.push([lon, lat, z]);
+                trajectory.push([lon, lat, z, velocity]);
             }
 
-            // Phase 2: Trim trajectory from end where it intersects terrain
-            if (queryElevation && trajectory.length > 1) {
-                const step = 10;
-                let trimIndex = 0; // Default to keeping only start point
+            // Binary search on ascending part [0, peak] - find FIRST point below terrain
+            let left = 1; // keep first point
+            let right = peakIndex;
+            let ascendingClip = -1;
 
-                // Coarse search: check every 10th point from end
-                for (let i = trajectory.length - 1; i >= 0; i -= step) {
-                    const point = trajectory[i];
-                    const terrainElevation = queryElevation([point[0], point[1]]) || 0;
+            while (left <= right) {
+                const mid = Math.floor((left + right) / 2);
+                const point = trajectory[mid];
+                const terrainElevation = getAlt(point[0], point[1]);
 
-                    if (point[2] > terrainElevation) {
-                        // Found point above terrain, fine search in [i, min(i+step, length-1)]
-                        const searchEnd = Math.min(i + step, trajectory.length - 1);
-
-                        for (let j = searchEnd; j >= i; j--) {
-                            const finePoint = trajectory[j];
-                            const fineTerrainElevation = queryElevation([finePoint[0], finePoint[1]]) || 0;
-
-                            if (finePoint[2] > fineTerrainElevation) {
-                                trimIndex = j;
-                                break;
-                            }
-                        }
-                        break; // Exit coarse search
-                    }
+                if (point[2] <= terrainElevation) {
+                    ascendingClip = mid;
+                    right = mid - 1;
+                } else {
+                    left = mid + 1;
                 }
-
-                trajectory.length = trimIndex + 1;
             }
 
-            // Calculate final range after trimming
-            const lastPoint = trajectory[trajectory.length - 1];
+            // Binary search on descending part [peak, end] - find LAST point above terrain
+            left = peakIndex;
+            right = trajectory.length - 1;
+            let descendingClip = -1;
+
+            while (left <= right) {
+                const mid = Math.floor((left + right) / 2);
+                const point = trajectory[mid];
+                const terrainElevation = getAlt(point[0], point[1]);
+
+                if (point[2] > terrainElevation) {
+                    descendingClip = mid;
+                    left = mid + 1;
+                } else {
+                    right = mid - 1;
+                }
+            }
+
+            // Determine clip index
+            let clipIndex = trajectory.length;
+
+            if (ascendingClip >= 0) {
+                clipIndex = ascendingClip;
+            }
+            if (descendingClip >= 0 && descendingClip + 1 < clipIndex) {
+                clipIndex = descendingClip + 1;
+            }
+
+            trajectory.length = clipIndex;
+
+            // if (!trajectory.length) return null;
+
+            // Calculate final range
+            // TODO 3d
+            const lastPoint = trajectory.at(-1);
             const finalDeltaLat = (lastPoint[1] - startLat) * 111320;
             const finalDeltaLon = (lastPoint[0] - startLon) * 111320 * Math.cos(startLat * Math.PI / 180);
-            range = Math.sqrt(finalDeltaLat * finalDeltaLat + finalDeltaLon * finalDeltaLon);
+            const range = Math.hypot(finalDeltaLat, finalDeltaLon);
 
             return {
                 trajectory,
                 maxHeight,
                 range,
                 flightTime: (trajectory.length - 1) * dt,
-                impactVelocity: Math.sqrt(vx * vx + vy * vy + vz * vz)
+                impactVelocity: lastPoint[3],
             };
         }
 
@@ -503,41 +527,42 @@
         // DECK.GL LAYER
         // ============================================================
 
-        function createTrajectoryLayer(trajectoryData, color = [0, 255, 65, 255]) {
+        function createTrajectoryLayer(trajectoryData) {
             if (!trajectoryData || trajectoryData.length < 2) return null;
 
             return new deck.PathLayer({
                 id: 'trajectory-path',
                 data: [{ path: trajectoryData }],
                 getPath: d => d.path,
-                getColor: color,
+                getColor: [0, 255, 65, 255],
                 getWidth: 3,
                 widthMinPixels: 2,
                 widthMaxPixels: 8,
                 billboard: true,
                 rounded: true,
-                pickable: true
             });
         }
 
         function createPointsLayer(trajectoryData) {
-            if (!trajectoryData || trajectoryData.length < 2) return null;
-
-            const startPoint = trajectoryData[0];
-            const endPoint = trajectoryData[trajectoryData.length - 1];
-
+            const layerData = [];
+            if (trajectoryData) {
+                if (trajectoryData.length > 0) {
+                    const position = trajectoryData.at(0);
+                    layerData.push({ position, color: [0, 255, 65, 255], size: 12 });
+                }
+                if (trajectoryData.length > 1) {
+                    const position = trajectoryData.at(-1);
+                    layerData.push({ position, color: [255, 58, 58, 255], size: 12 });
+                }
+            }
             return new deck.ScatterplotLayer({
                 id: 'trajectory-points',
-                data: [
-                    { position: startPoint, color: [0, 255, 65, 255], size: 12 },
-                    { position: endPoint, color: [255, 58, 58, 255], size: 12 }
-                ],
+                data: layerData,
                 getPosition: d => d.position,
                 getFillColor: d => d.color,
                 getRadius: d => d.size,
                 radiusMinPixels: 6,
                 radiusMaxPixels: 20,
-                pickable: true
             });
         }
 
@@ -546,27 +571,26 @@
         // ============================================================
 
         function BallisticCalculator() {
-            const [params, setParams] = useState({
-                ammoType: '7.62x39',
-                angle: 45,
-                azimuth: 90,
-                startLat: 43.1941129696722,
-                startLon: 76.8873077630997,
-                startAlt: 0
-            });
-
             const mapRef = useRef(null);
             const deckOverlayRef = useRef(null);
 
-            // Computed state from params
+            const [params, setParams] = useState({
+                ammoType: '7.62x39',
+                angle: 30,
+                azimuth: 90,
+                startLat: 0,
+                startLon: 0,
+                startAlt: 0,
+            });
+            const [renderTrigger, setRenderTrigger] = useState(0);
+
             const computed = useMemo(() => {
-                const ammo = AMMUNITION_DATABASE[params.ammoType];
-                // Create terrain query function if map available
-                const queryElevation = mapRef.current && mapRef.current.getTerrain()
-                    ? (lngLat) => mapRef.current.queryTerrainElevation(lngLat)
-                    : null;
-                return calculateTrajectory(params, ammo, queryElevation);
-            }, [params]);
+                const map = mapRef.current;
+                const getAlt = (lng, lat) => map?.queryTerrainElevation([lng, lat]) || 0;
+
+                const ammo = AMMO_DB[params.ammoType];
+                return calculateTrajectory(params, ammo, getAlt);
+            }, [params, renderTrigger]);
 
             const mapContainerRef = useCallback((node) => {
                 if (!node) {
@@ -579,37 +603,39 @@
                     return;
                 }
 
-                // Initialize map when element is created in DOM
                 const map = new maplibregl.Map({
                     container: node,
                     // style: 'https://tiles.openfreemap.org/styles/positron',
                     style: 'https://api.maptiler.com/maps/topo-v4/style.json?key=Uz7bgVMimrtzx1UnaF6W',
-                    center: [params.startLon, params.startLat],
+                    center: [76.88, 43.19], // almaty
                     zoom: 10,
                     pitch: 60,
-                    bearing: 0,
+                    // bearing: 180,
                 });
+
+                mapRef.current = map;
+
+                const navCtl = new maplibregl.NavigationControl({ showZoom: false });
+                map.addControl(navCtl, 'top-right');
 
                 // Update start point on map click
                 map.on('click', (e) => {
+                    // TODO wait for terrain
                     const elevation = map.queryTerrainElevation(e.lngLat) || 0;
                     setParams(prev => ({
                         ...prev,
                         startLat: e.lngLat.lat,
                         startLon: e.lngLat.lng,
-                        startAlt: elevation
+                        startAlt: elevation + 1 /* от бедра */,
                     }));
                 });
 
                 map.on('load', () => {
-                    // Add terrain source
                     map.addSource('terrain', {
                         type: 'raster-dem',
                         url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=Uz7bgVMimrtzx1UnaF6W',
-                        tileSize: 256
+                        tileSize: 256,
                     });
-
-                    // Enable 3D terrain
                     map.setTerrain({
                         source: 'terrain',
                         exaggeration: 1,
@@ -617,28 +643,33 @@
 
                     const deckOverlay = new deck.MapboxOverlay({
                         interleaved: false,
-                        layers: []
+                        layers: [],
                     });
 
                     map.addControl(deckOverlay);
                     deckOverlayRef.current = deckOverlay;
+
+                    map.resize();
                 });
 
-                mapRef.current = map;
+                // Trigger re-render when terrain tiles are loaded
+                map.on('idle', () => {
+                    setRenderTrigger(prev => prev + 1);
+                });
             }, []);
 
-            // Update deck layers when computed state changes
+            // Update deck layers when computed trajectory changes
             useEffect(() => {
-                if (!(deckOverlayRef.current && computed.trajectory)) return;
+                if (!(deckOverlayRef.current && computed && computed.trajectory)) return;
                 deckOverlayRef.current.setProps({
                     layers: [
                         createTrajectoryLayer(computed.trajectory),
-                        createPointsLayer(computed.trajectory)
-                    ]
+                        createPointsLayer(computed.trajectory),
+                    ],
                 });
             }, [computed]);
 
-            const currentAmmo = AMMUNITION_DATABASE[params.ammoType];
+            const currentAmmo = AMMO_DB[params.ammoType];
 
             return h('div', { id: 'app' },
                 h('div', { id: 'map-container' },
@@ -648,17 +679,16 @@
                     h('div', { className: 'controls' },
                         h('div', { className: 'control-group' },
                             h('label', null, 'Тип боеприпаса'),
-                            h('select', {
-                                value: params.ammoType,
-                                onChange: (e) => setParams(prev => ({...prev, ammoType: e.target.value}))
-                            },
-                                Object.keys(AMMUNITION_DATABASE).map(key =>
-                                    h('option', { value: key, key }, AMMUNITION_DATABASE[key].name)
-                                )
-                            )
-                        ),
-                        currentAmmo && h('div', { className: 'ammo-specs' },
-                            h('h4', null, 'Характеристики боеприпаса'),
+                            h('select',
+                                {
+                                    value: params.ammoType,
+                                    onChange: (e) => setParams(prev => ({...prev, ammoType: e.target.value}))
+                                },
+                                Object.entries(AMMO_DB).map(([key, val]) => h('option', { value: key, key }, val.name)),
+                            ),
+                            h('p', { style: { marginTop: '12px', fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' } },
+                                currentAmmo.description
+                            ),
                             h('div', { className: 'spec-grid' },
                                 h('div', { className: 'spec-item' },
                                     h('div', { className: 'spec-item-label' }, 'Масса'),
@@ -674,12 +704,9 @@
                                 ),
                                 h('div', { className: 'spec-item' },
                                     h('div', { className: 'spec-item-label' }, 'Коэф. сопротивления'),
-                                    h('div', { className: 'spec-item-value' }, currentAmmo.dragCoefficient.toFixed(3))
-                                )
+                                    h('div', { className: 'spec-item-value' }, currentAmmo.dragCoefficient.toFixed(3)),
+                                ),
                             ),
-                            h('p', { style: { marginTop: '12px', fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' } },
-                                currentAmmo.description
-                            )
                         ),
                         h('div', { className: 'control-group' },
                             h('label', null, `Угол возвышения: ${params.angle}°`),
@@ -711,35 +738,12 @@
                                 h('span', null, 'Ю (180°)')
                             )
                         ),
-                        h('div', { className: 'control-group' },
-                            h('label', null, 'Координаты старта'),
-                            h('div', { className: 'coordinates' },
-                                h('div', { className: 'coord-input' },
-                                    h('label', null, 'Широта'),
-                                    h('input', {
-                                        type: 'number',
-                                        step: '0.0001',
-                                        value: params.startLat,
-                                        onInput: (e) => setParams(prev => ({...prev, startLat: Number(e.target.value)}))
-                                    })
-                                ),
-                                h('div', { className: 'coord-input' },
-                                    h('label', null, 'Долгота'),
-                                    h('input', {
-                                        type: 'number',
-                                        step: '0.0001',
-                                        value: params.startLon,
-                                        onInput: (e) => setParams(prev => ({...prev, startLon: Number(e.target.value)}))
-                                    })
-                                )
-                            )
-                        )
                     ),
-                    computed.trajectory && h('div', { className: 'stats' },
-                        h('h3', null, 'Результаты'),
+                    computed && computed.trajectory && h('div', { className: 'stats' },
+                        // h('h3', null, 'Результаты'),
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Дальность'),
-                            h('span', { className: 'stat-value' }, `${(computed.range / 1000).toFixed(2)} км`)
+                            h('span', { className: 'stat-value' }, `${(computed.range / 1000).toFixed(2)} км`),
                         ),
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Макс. высота'),
@@ -752,7 +756,7 @@
                         h('div', { className: 'stat-row' },
                             h('span', { className: 'stat-label' }, 'Скорость удара'),
                             h('span', { className: 'stat-value' }, `${computed.impactVelocity.toFixed(0)} м/с`)
-                        )
+                        ),
                     ),
                 )
             );
