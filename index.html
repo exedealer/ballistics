@@ -401,11 +401,7 @@
         const GRAVITY = 9.81; // м/с²
         const AIR_DENSITY = 1.225; // кг/м³
 
-        function calculateDragForce(velocity, ammo) {
-            const area = Math.PI * Math.pow(ammo.diameter / 2, 2);
-            const dragForce = 0.5 * AIR_DENSITY * velocity * velocity * ammo.dragCoefficient * area;
-            return dragForce;
-        }
+
 
         function calculateTrajectory(params, ammo, queryElevation = null, windSpeed = 0, windDirection = 0) {
             const { startLat, startLon, angle, azimuth, startAlt = 0 } = params;
@@ -427,21 +423,22 @@
             let maxHeight = 0;
             let range = 0;
 
+            // Pre-calculate static drag coefficient
+            const area = Math.PI * Math.pow(.5 * ammo.diameter, 2);
+            const dragCoeff = .5 * AIR_DENSITY * ammo.dragCoefficient * area / ammo.mass;
+
             // Phase 1: Simulate physics without terrain checks
-            while (z >= 0 && trajectory.length < maxPoints) {
-                const velocity = Math.sqrt(vx * vx + vy * vy + vz * vz);
-                const dragForce = calculateDragForce(velocity, ammo);
-                const dragAccel = dragForce / ammo.mass;
+            while (z > 0 && trajectory.length < maxPoints) {
+                const velocity = Math.hypot(vx, vy, vz);
 
-                if (velocity > 0) {
-                    const ax = -(dragAccel * vx) / velocity;
-                    const ay = -(dragAccel * vy) / velocity;
-                    const az = -GRAVITY - (dragAccel * vz) / velocity;
+                const dragScale = dragCoeff * velocity;
+                const ax = -(dragScale * vx);
+                const ay = -(dragScale * vy);
+                const az = -GRAVITY - (dragScale * vz);
 
-                    vx += ax * dt;
-                    vy += ay * dt;
-                    vz += az * dt;
-                }
+                vx += ax * dt;
+                vy += ay * dt;
+                vz += az * dt;
 
                 x += vx * dt;
                 y += vy * dt;
@@ -454,7 +451,7 @@
                 const lon = startLon + deltaLon;
                 const lat = startLat + deltaLat;
 
-                trajectory.push([lon, lat, Math.max(0, z)]);
+                trajectory.push([lon, lat, z]);
             }
 
             // Phase 2: Trim trajectory from end where it intersects terrain
