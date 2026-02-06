@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Баллистический Калькулятор</title>
+    <title>Ballistic Calculator</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.16.0/dist/maplibre-gl.css">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
 
         * {
             margin: 0;
@@ -15,38 +15,21 @@
         }
 
         :root {
-            --primary: #00ff41;
-            --secondary: #ff3a3a;
-            --bg-dark: #0a0e1a;
-            --bg-card: #141b2d;
-            --bg-input: #1a2332;
-            --text-primary: #e0e6ed;
-            --text-secondary: #8b95a8;
-            --border: #2a3447;
-            --grid: rgba(0, 255, 65, 0.1);
+            --primary: #3b82f6;
+            --secondary: #ef4444;
+            --bg-dark: #0a0a0a;
+            --bg-sidebar: #111111;
+            --bg-control: #1a1a1a;
+            --text-primary: #e5e5e5;
+            --text-secondary: #737373;
+            --accent: #60a5fa;
         }
 
         body {
-            font-family: 'IBM Plex Mono', monospace;
+            font-family: 'Roboto', sans-serif;
             background: var(--bg-dark);
             color: var(--text-primary);
             overflow: hidden;
-            position: relative;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background:
-                repeating-linear-gradient(0deg, transparent, transparent 2px, var(--grid) 2px, var(--grid) 4px),
-                repeating-linear-gradient(90deg, transparent, transparent 2px, var(--grid) 2px, var(--grid) 4px);
-            pointer-events: none;
-            opacity: 0.3;
-            z-index: 1;
         }
 
         #app {
@@ -54,13 +37,12 @@
             height: 100vh;
             display: flex;
             position: relative;
-            z-index: 2;
         }
 
         #map-container {
             flex: 1;
             position: relative;
-            background: #0d1117;
+            background: var(--bg-dark);
         }
 
         #map {
@@ -70,55 +52,10 @@
 
         .sidebar {
             width: 380px;
-            background: var(--bg-card);
-            border-left: 2px solid var(--border);
+            background: var(--bg-sidebar);
             display: flex;
             flex-direction: column;
             overflow-y: auto;
-            box-shadow: -10px 0 40px rgba(0, 0, 0, 0.5);
-        }
-
-        .header {
-            padding: 24px;
-            border-bottom: 2px solid var(--border);
-            background: linear-gradient(135deg, var(--bg-card) 0%, #1a2640 100%);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .header::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(0, 255, 65, 0.05) 0%, transparent 70%);
-            animation: pulse 4s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 0.5; }
-            50% { transform: scale(1.1); opacity: 0.8; }
-        }
-
-        .header h1 {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 22px;
-            font-weight: 900;
-            color: var(--primary);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
-            position: relative;
-        }
-
-        .header .subtitle {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 6px;
-            letter-spacing: 1px;
-            position: relative;
         }
 
         .controls {
@@ -128,216 +65,124 @@
 
         .control-group {
             margin-bottom: 24px;
-            background: var(--bg-input);
+            background: var(--bg-control);
             padding: 16px;
-            border-radius: 4px;
-            border: 1px solid var(--border);
-            transition: all 0.3s;
-        }
-
-        .control-group:hover {
-            border-color: var(--primary);
-            box-shadow: 0 0 15px rgba(0, 255, 65, 0.1);
+            border-radius: 0;
         }
 
         .control-group label {
             display: block;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-size: 12px;
+            font-weight: 500;
             margin-bottom: 10px;
-            color: var(--text-secondary);
+            color: var(--text-primary);
         }
 
         .control-group select,
         .control-group input {
             width: 100%;
-            padding: 12px;
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 2px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            border-radius: 4px;
             color: var(--text-primary);
-            font-family: 'IBM Plex Mono', monospace;
+            font-family: 'Roboto', sans-serif;
             font-size: 14px;
-            transition: all 0.2s;
         }
 
         .control-group select:focus,
         .control-group input:focus {
             outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .control-group input[type="range"] {
             padding: 0;
-            height: 6px;
-            background: var(--border);
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
             cursor: pointer;
             appearance: none;
             -webkit-appearance: none;
+            border-radius: 2px;
         }
 
         .control-group input[type="range"]::-webkit-slider-thumb {
             appearance: none;
             -webkit-appearance: none;
-            width: 18px;
-            height: 18px;
+            width: 14px;
+            height: 14px;
             background: var(--primary);
             cursor: pointer;
             border-radius: 50%;
-            box-shadow: 0 0 10px var(--primary);
         }
 
         .control-group input[type="range"]::-moz-range-thumb {
-            width: 18px;
-            height: 18px;
+            width: 14px;
+            height: 14px;
             background: var(--primary);
             cursor: pointer;
             border-radius: 50%;
             border: none;
-            box-shadow: 0 0 10px var(--primary);
         }
 
         .value-display {
             display: flex;
             justify-content: space-between;
             margin-top: 8px;
-            font-size: 12px;
-            color: var(--primary);
-        }
-
-        .coordinates {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .coord-input {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .coord-input label {
-            font-size: 10px;
-            margin-bottom: 6px;
+            font-size: 11px;
+            color: var(--text-secondary);
         }
 
         .stats {
             padding: 20px;
-            background: var(--bg-input);
-            border-top: 2px solid var(--border);
-            border-bottom: 2px solid var(--border);
-        }
-
-        .stats h3 {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 14px;
-            color: var(--primary);
-            margin-bottom: 16px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            background: var(--bg-control);
         }
 
         .stat-row {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border);
-            font-size: 12px;
-        }
-
-        .stat-row:last-child {
-            border-bottom: none;
+            align-items: center;
+            padding: 12px 0;
+            font-size: 13px;
         }
 
         .stat-label {
             color: var(--text-secondary);
+            font-weight: 400;
         }
 
         .stat-value {
             color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .ammo-specs {
-            padding: 20px;
-            background: rgba(0, 255, 65, 0.03);
-            border-top: 1px solid var(--primary);
-        }
-
-        .ammo-specs h4 {
-            font-size: 12px;
-            color: var(--primary);
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-weight: 500;
         }
 
         .spec-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 8px;
+            gap: 10px;
             font-size: 11px;
+            margin-top: 1em;
         }
 
         .spec-item {
             display: flex;
             flex-direction: column;
-            padding: 8px;
-            background: var(--bg-input);
-            border-radius: 2px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 4px;
         }
 
         .spec-item-label {
             color: var(--text-secondary);
-            font-size: 9px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-size: 10px;
+            font-weight: 500;
+            margin-bottom: 4px;
         }
 
         .spec-item-value {
             color: var(--text-primary);
-            font-weight: 600;
-            margin-top: 4px;
-        }
-
-        .map-overlay {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(10, 14, 26, 0.95);
-            padding: 16px;
-            border-radius: 4px;
-            border: 1px solid var(--border);
-            backdrop-filter: blur(10px);
-            max-width: 300px;
-        }
-
-        .map-overlay h3 {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 12px;
-            color: var(--primary);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
-
-        .map-overlay p {
-            font-size: 11px;
-            color: var(--text-secondary);
-            line-height: 1.6;
-        }
-
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 14px;
-            color: var(--primary);
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            font-weight: 500;
+            font-size: 13px;
         }
 
         @media (max-width: 1024px) {
@@ -366,8 +211,8 @@
         // ============================================================
         const AMMO_DB = {
             '7.62x39': {
-                name: '7.62×39мм',
-                description: 'Промежуточный патрон АК-47',
+                name: '7.62×39mm',
+                description: 'AK-47 intermediate cartridge',
                 mass: 0.00794, // кг
                 diameter: 0.00762, // м
                 muzzleVelocity: 715, // м/с
@@ -376,7 +221,7 @@
             },
             '50bmg': {
                 name: '.50 BMG',
-                description: 'Крупнокалиберный пулемётный патрон',
+                description: 'Heavy machine gun cartridge',
                 mass: 0.0420, // кг
                 diameter: 0.0127, // м
                 muzzleVelocity: 928, // м/с
@@ -384,8 +229,8 @@
                 category: 'heavy',
             },
             '152mm': {
-                name: '152мм 3ВОФ36',
-                description: 'Артиллерийский снаряд 2С19 Мста-С',
+                name: '152mm 3VOF36',
+                description: '2S19 Msta-S artillery shell',
                 mass: 43.56, // кг
                 diameter: 0.152, // м
                 muzzleVelocity: 810, // м/с
@@ -394,26 +239,21 @@
             }
         };
 
-        // ============================================================
-        // БАЛЛИСТИЧЕСКИЕ РАСЧЁТЫ
-        // ============================================================
 
         const GRAVITY = 9.81; // м/с²
         const AIR_DENSITY = 1.225; // кг/м³
 
-        // Calculate full ballistic trajectory without terrain clipping
-        // Terrain intersection is handled at render time using loaded map tiles
         function calculateTrajectory(params, ammo, getAlt, windSpeed = 0, windDirection = 0) {
-            const { startLat, startLon, angle, azimuth, startAlt = 0 } = params;
+            const { startLat, startLon, elevation, azimuth, startAlt = 0 } = params;
             const dt = 0.1; // временной шаг в секундах
             const maxPoints = 1200; // максимальное количество точек траектории
 
-            const angleRad = (angle * Math.PI) / 180;
+            const elevationRad = (elevation * Math.PI) / 180;
             const azimuthRad = (azimuth * Math.PI) / 180;
 
-            let vx = ammo.muzzleVelocity * Math.cos(angleRad) * Math.sin(azimuthRad);
-            let vy = ammo.muzzleVelocity * Math.cos(angleRad) * Math.cos(azimuthRad);
-            let vz = ammo.muzzleVelocity * Math.sin(angleRad);
+            let vx = ammo.muzzleVelocity * Math.cos(elevationRad) * Math.sin(azimuthRad);
+            let vy = ammo.muzzleVelocity * Math.cos(elevationRad) * Math.cos(azimuthRad);
+            let vz = ammo.muzzleVelocity * Math.sin(elevationRad);
 
             let x = 0;
             let y = 0;
@@ -523,64 +363,63 @@
             };
         }
 
-        // ============================================================
-        // DECK.GL LAYER
-        // ============================================================
+        function createDeckLayers(trajectoryData) {
+            // if (!trajectoryData || trajectoryData.length < 2) return null;
 
-        function createTrajectoryLayer(trajectoryData) {
-            if (!trajectoryData || trajectoryData.length < 2) return null;
+            const points = [];
 
-            return new deck.PathLayer({
-                id: 'trajectory-path',
-                data: [{ path: trajectoryData }],
-                getPath: d => d.path,
-                getColor: [0, 255, 65, 255],
-                getWidth: 3,
-                widthMinPixels: 2,
-                widthMaxPixels: 8,
-                billboard: true,
-                rounded: true,
-            });
-        }
-
-        function createPointsLayer(trajectoryData) {
-            const layerData = [];
             if (trajectoryData) {
                 if (trajectoryData.length > 0) {
                     const position = trajectoryData.at(0);
-                    layerData.push({ position, color: [0, 255, 65, 255], size: 12 });
+                    points.push({ position, color: [0, 255, 65, 255] });
                 }
                 if (trajectoryData.length > 1) {
                     const position = trajectoryData.at(-1);
-                    layerData.push({ position, color: [255, 58, 58, 255], size: 12 });
+                    points.push({ position, color: [255, 58, 58, 255] });
                 }
             }
-            return new deck.ScatterplotLayer({
-                id: 'trajectory-points',
-                data: layerData,
-                getPosition: d => d.position,
-                getFillColor: d => d.color,
-                getRadius: d => d.size,
-                radiusMinPixels: 6,
-                radiusMaxPixels: 20,
-            });
+
+            return [
+                new deck.PathLayer({
+                    id: 'trajectory-path',
+                    data: [{ path: trajectoryData }],
+                    getPath: d => d.path,
+                    getColor: [0, 255, 65, 255],
+                    getWidth: 3,
+                    widthMinPixels: 2,
+                    widthMaxPixels: 8,
+                    billboard: true,
+                    rounded: true,
+                }),
+
+                new deck.ScatterplotLayer({
+                    id: 'trajectory-points',
+                    data: points,
+                    getPosition: d => d.position,
+                    getFillColor: d => d.color,
+                    getRadius: 12,
+                    radiusMinPixels: 6,
+                    radiusMaxPixels: 20,
+                }),
+            ];
+
         }
 
-        // ============================================================
-        // PREACT КОМПОНЕНТ
-        // ============================================================
+        function createPointsLayer(trajectoryData) {
+
+        }
 
         function BallisticCalculator() {
             const mapRef = useRef(null);
             const deckOverlayRef = useRef(null);
 
             const [params, setParams] = useState({
-                ammoType: '7.62x39',
-                angle: 30,
-                azimuth: 90,
-                startLat: 0,
-                startLon: 0,
-                startAlt: 0,
+                ammoType: '50bmg',
+                azimuth: 150,
+                elevation: 33,
+                startAlt: 887,
+                startLat: 43.219,
+                startLon: 76.913,
             });
             const [renderTrigger, setRenderTrigger] = useState(0);
 
@@ -607,6 +446,7 @@
                     container: node,
                     // style: 'https://tiles.openfreemap.org/styles/positron',
                     style: 'https://api.maptiler.com/maps/topo-v4/style.json?key=Uz7bgVMimrtzx1UnaF6W',
+                    // style: './topo-v4-with-terrain.json?key=Uz7bgVMimrtzx1UnaF6W',
                     center: [76.88, 43.19], // almaty
                     zoom: 10,
                     pitch: 60,
@@ -614,12 +454,34 @@
                 });
 
                 mapRef.current = map;
+                globalThis.debug_map = map;
+
+                map.on('load', () => {
+                    // map.addSource('terrain', {
+                    //     type: 'raster-dem',
+                    //     url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=Uz7bgVMimrtzx1UnaF6W',
+                    //     tileSize: 256,
+                    // });
+                    map.setTerrain({
+                        source: 'terrain_rgb',
+                        exaggeration: 1,
+                    });
+                });
 
                 const navCtl = new maplibregl.NavigationControl({ showZoom: false });
                 map.addControl(navCtl, 'top-right');
 
+                const deckOverlay = new deck.MapboxOverlay({
+                    interleaved: false,
+                    layers: [],
+                });
+
+                map.addControl(deckOverlay);
+                deckOverlayRef.current = deckOverlay;
+
                 // Update start point on map click
                 map.on('click', (e) => {
+
                     // TODO wait for terrain
                     const elevation = map.queryTerrainElevation(e.lngLat) || 0;
                     setParams(prev => ({
@@ -628,28 +490,6 @@
                         startLon: e.lngLat.lng,
                         startAlt: elevation + 1 /* от бедра */,
                     }));
-                });
-
-                map.on('load', () => {
-                    map.addSource('terrain', {
-                        type: 'raster-dem',
-                        url: 'https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=Uz7bgVMimrtzx1UnaF6W',
-                        tileSize: 256,
-                    });
-                    map.setTerrain({
-                        source: 'terrain',
-                        exaggeration: 1,
-                    });
-
-                    const deckOverlay = new deck.MapboxOverlay({
-                        interleaved: false,
-                        layers: [],
-                    });
-
-                    map.addControl(deckOverlay);
-                    deckOverlayRef.current = deckOverlay;
-
-                    map.resize();
                 });
 
                 // Trigger re-render when terrain tiles are loaded
@@ -662,11 +502,10 @@
             useEffect(() => {
                 if (!(deckOverlayRef.current && computed && computed.trajectory)) return;
                 deckOverlayRef.current.setProps({
-                    layers: [
-                        createTrajectoryLayer(computed.trajectory),
-                        createPointsLayer(computed.trajectory),
-                    ],
+                    layers: createDeckLayers(computed.trajectory),
                 });
+                    console.log(params);
+
             }, [computed]);
 
             const currentAmmo = AMMO_DB[params.ammoType];
@@ -678,7 +517,7 @@
                 h('div', { className: 'sidebar' },
                     h('div', { className: 'controls' },
                         h('div', { className: 'control-group' },
-                            h('label', null, 'Тип боеприпаса'),
+                            h('label', null, 'Ammunition Type'),
                             h('select',
                                 {
                                     value: params.ammoType,
@@ -686,37 +525,37 @@
                                 },
                                 Object.entries(AMMO_DB).map(([key, val]) => h('option', { value: key, key }, val.name)),
                             ),
-                            h('p', { style: { marginTop: '12px', fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' } },
-                                currentAmmo.description
-                            ),
+                            // h('p', { className: 'spec-desc' },
+                            //     currentAmmo.description,
+                            // ),
                             h('div', { className: 'spec-grid' },
                                 h('div', { className: 'spec-item' },
-                                    h('div', { className: 'spec-item-label' }, 'Масса'),
-                                    h('div', { className: 'spec-item-value' }, `${(currentAmmo.mass * 1000).toFixed(1)} г`)
+                                    h('div', { className: 'spec-item-label' }, 'Mass'),
+                                    h('div', { className: 'spec-item-value' }, `${(currentAmmo.mass * 1000).toFixed(1)} g`)
                                 ),
                                 h('div', { className: 'spec-item' },
-                                    h('div', { className: 'spec-item-label' }, 'Калибр'),
-                                    h('div', { className: 'spec-item-value' }, `${(currentAmmo.diameter * 1000).toFixed(1)} мм`)
+                                    h('div', { className: 'spec-item-label' }, 'Caliber'),
+                                    h('div', { className: 'spec-item-value' }, `${(currentAmmo.diameter * 1000).toFixed(1)} mm`)
                                 ),
                                 h('div', { className: 'spec-item' },
-                                    h('div', { className: 'spec-item-label' }, 'Начальная скорость'),
-                                    h('div', { className: 'spec-item-value' }, `${currentAmmo.muzzleVelocity} м/с`)
+                                    h('div', { className: 'spec-item-label' }, 'Muzzle Velocity'),
+                                    h('div', { className: 'spec-item-value' }, `${currentAmmo.muzzleVelocity} m/s`)
                                 ),
                                 h('div', { className: 'spec-item' },
-                                    h('div', { className: 'spec-item-label' }, 'Коэф. сопротивления'),
+                                    h('div', { className: 'spec-item-label' }, 'Drag Coefficient'),
                                     h('div', { className: 'spec-item-value' }, currentAmmo.dragCoefficient.toFixed(3)),
                                 ),
                             ),
                         ),
                         h('div', { className: 'control-group' },
-                            h('label', null, `Угол возвышения: ${params.angle}°`),
+                            h('label', null, `Elevation: ${params.elevation}°`),
                             h('input', {
                                 type: 'range',
                                 min: '0',
                                 max: '89',
                                 step: '1',
-                                value: params.angle,
-                                onInput: (e) => setParams(prev => ({...prev, angle: Number(e.target.value)}))
+                                value: params.elevation,
+                                onInput: (e) => setParams(prev => ({...prev, elevation: Number(e.target.value)}))
                             }),
                             h('div', { className: 'value-display' },
                                 h('span', null, '0°'),
@@ -724,38 +563,37 @@
                             )
                         ),
                         h('div', { className: 'control-group' },
-                            h('label', null, `Азимут: ${params.azimuth}°`),
+                            h('label', null, `Azimuth: ${params.azimuth}°`),
                             h('input', {
                                 type: 'range',
-                                min: '0',
-                                max: '360',
+                                min: '-180',
+                                max: '180',
                                 step: '1',
                                 value: params.azimuth,
                                 onInput: (e) => setParams(prev => ({...prev, azimuth: Number(e.target.value)}))
                             }),
                             h('div', { className: 'value-display' },
-                                h('span', null, 'С (0°)'),
-                                h('span', null, 'Ю (180°)')
+                                h('span', null, 'W (-90°)'),
+                                h('span', null, 'E (+90°)')
                             )
                         ),
                     ),
                     computed && computed.trajectory && h('div', { className: 'stats' },
-                        // h('h3', null, 'Результаты'),
                         h('div', { className: 'stat-row' },
-                            h('span', { className: 'stat-label' }, 'Дальность'),
-                            h('span', { className: 'stat-value' }, `${(computed.range / 1000).toFixed(2)} км`),
+                            h('span', { className: 'stat-label' }, 'Range'),
+                            h('span', { className: 'stat-value' }, `${(computed.range / 1000).toFixed(2)} km`),
                         ),
                         h('div', { className: 'stat-row' },
-                            h('span', { className: 'stat-label' }, 'Макс. высота'),
-                            h('span', { className: 'stat-value' }, `${computed.maxHeight.toFixed(0)} м`)
+                            h('span', { className: 'stat-label' }, 'Max Height'),
+                            h('span', { className: 'stat-value' }, `${computed.maxHeight.toFixed(0)} m`)
                         ),
                         h('div', { className: 'stat-row' },
-                            h('span', { className: 'stat-label' }, 'Время полёта'),
-                            h('span', { className: 'stat-value' }, `${computed.flightTime.toFixed(1)} с`)
+                            h('span', { className: 'stat-label' }, 'Flight Time'),
+                            h('span', { className: 'stat-value' }, `${computed.flightTime.toFixed(1)} s`)
                         ),
                         h('div', { className: 'stat-row' },
-                            h('span', { className: 'stat-label' }, 'Скорость удара'),
-                            h('span', { className: 'stat-value' }, `${computed.impactVelocity.toFixed(0)} м/с`)
+                            h('span', { className: 'stat-label' }, 'Impact Velocity'),
+                            h('span', { className: 'stat-value' }, `${computed.impactVelocity.toFixed(0)} m/s`)
                         ),
                     ),
                 )
