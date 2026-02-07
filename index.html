@@ -218,40 +218,40 @@
             '7.62x39': {
                 name: '7.62×39mm',
                 description: 'AK-47 intermediate cartridge',
-                mass: 0.00794, // кг
-                diameter: 0.00762, // м
-                muzzleVelocity: 715, // м/с
+                mass: 0.00794, // kg
+                diameter: 0.00762, // m
+                muzzleVelocity: 715, // m/s
                 dragCoefficient: 0.295,
                 category: 'rifle',
             },
             '50bmg': {
                 name: '.50 BMG',
                 description: 'Heavy machine gun cartridge',
-                mass: 0.0420, // кг
-                diameter: 0.0127, // м
-                muzzleVelocity: 928, // м/с
+                mass: 0.0420, // kg
+                diameter: 0.0127, // m
+                muzzleVelocity: 928, // m/s
                 dragCoefficient: 0.295,
                 category: 'heavy',
             },
-            '152mm': {
-                name: '152mm 3VOF36',
-                description: '2S19 Msta-S artillery shell',
-                mass: 43.56, // кг
-                diameter: 0.152, // м
-                muzzleVelocity: 810, // м/с
-                dragCoefficient: 0.325,
+            '155mm': {
+                name: '155mm M795 HE',
+                description: 'NATO 155mm high-explosive artillery shell',
+                mass: 46.7,          // kg
+                diameter: 0.155,     // m
+                muzzleVelocity: 830, // m/s
+                dragCoefficient: 0.33,
                 category: 'artillery',
-            }
+            },
         };
 
 
-        const GRAVITY = 9.81; // м/с²
-        const AIR_DENSITY = 1.225; // кг/м³
+        const GRAVITY = 9.81; // m/s²
+        const AIR_DENSITY = 1.225; // kg/m³
 
         function calculateTrajectory(params, ammo, getAlt, windSpeed = 0, windDirection = 0) {
             const { startLat, startLon, elevation, azimuth, startAlt = 0 } = params;
-            const dt = 0.1; // временной шаг в секундах
-            const maxPoints = 1200; // максимальное количество точек траектории
+            const dt = 0.1; // time step, sec
+            const maxPoints = 1200;
 
             const elevationRad = (elevation * Math.PI) / 180;
             const azimuthRad = (azimuth * Math.PI) / 180;
@@ -320,6 +320,7 @@
                 }
             }
 
+            // TODO skip if intersection found on ascending part
             // Binary search on descending part [peak, end] - find LAST point above terrain
             left = peakIndex;
             right = trajectory.length - 1;
@@ -350,8 +351,6 @@
 
             trajectory.length = clipIndex;
 
-            // if (!trajectory.length) return null;
-
             // Calculate final range
             // TODO 3d
             const lastPoint = trajectory.at(-1);
@@ -369,8 +368,6 @@
         }
 
         function createDeckLayers(trajectoryData) {
-            // if (!trajectoryData || trajectoryData.length < 2) return null;
-
             const points = [];
 
             if (trajectoryData) {
@@ -456,13 +453,6 @@
                 mapRef.current = map;
                 globalThis.debug_map = map;
 
-                // Seems there is bug in maplibre (v5.17)
-                // Click produces wrong lnglat after terrain loaded.
-                // After first camera move everything ok
-                map.once('load', _ => {
-                    map.jumpTo({ zoom: map.getZoom() * 1.0001 });
-                });
-
                 const navCtl = new maplibregl.NavigationControl({ showZoom: false });
                 map.addControl(navCtl, 'top-right');
 
@@ -470,9 +460,17 @@
                     interleaved: false,
                     layers: [],
                 });
-
-                map.addControl(deckOverlay);
                 deckOverlayRef.current = deckOverlay;
+
+                map.once('load', _ => {
+                    // add deck after load to reduce trajectory clip flicker
+                    map.addControl(deckOverlay);
+
+                    // Seems there is bug in maplibre (v5.17)
+                    // Click produces wrong lnglat after terrain loaded.
+                    // After first camera move everything ok
+                    map.jumpTo({ zoom: map.getZoom() * 1.0001 });
+                });
 
                 // Update start point on map click
                 map.on('click', (e) => {
