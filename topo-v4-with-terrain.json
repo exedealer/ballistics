@@ -1,6 +1,6 @@
 {
   "terrain": {
-     "source": "terrain_rgb",
+     "source": "terrain",
      "exaggeration": 1
   },
   "version": 8,
@@ -24,6 +24,10 @@
       "type": "vector"
     },
     "terrain_rgb": {
+      "url": "https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=Uz7bgVMimrtzx1UnaF6W",
+      "type": "raster-dem"
+    },
+    "terrain": {
       "url": "https://api.maptiler.com/tiles/terrain-rgb-v2/tiles.json?key=Uz7bgVMimrtzx1UnaF6W",
       "type": "raster-dem"
     }
