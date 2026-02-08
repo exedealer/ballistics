@@ -391,11 +391,11 @@
             if (trajectoryData) {
                 if (trajectoryData.length > 0) {
                     const position = trajectoryData.at(0);
-                    points.push({ position, color: [0, 255, 65, 255] });
+                    points.push({ position, color: [0, 0x90, 0xe0] });
                 }
                 if (trajectoryData.length > 1) {
                     const position = trajectoryData.at(-1);
-                    points.push({ position, color: [255, 58, 58, 255] });
+                    points.push({ position, color: [0xff, 0, 0x80] });
                 }
             }
 
@@ -404,7 +404,7 @@
                     id: 'trajectory-path',
                     data: [{ path: trajectoryData }],
                     getPath: d => d.path,
-                    getColor: [0, 255, 65, 255],
+                    getColor: [0, 0x90, 0xe0],
                     getWidth: 3,
                     widthMinPixels: 2,
                     widthMaxPixels: 8,
